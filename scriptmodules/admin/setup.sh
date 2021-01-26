@@ -156,11 +156,6 @@ function package_setup() {
     local id="$1"
     local default=""
 
-    if ! rp_isEnabled "$id"; then
-        printMsgs "dialog" "Sorry but package '$id' is not available for your system ($__platform)\n\nPackage flags: ${__mod_info[$id/flags]}\n\nYour $__platform flags: ${__platform_flags[*]}"
-        return 1
-    fi
-
     # associative array so we can pull out the messages later for the confirmation requester
     declare -A option_msgs=(
         ["U"]=""
@@ -240,7 +235,7 @@ function package_setup() {
             options+=(Z "Clean source folder")
         fi
 
-        local help="${__mod_info[$id/desc]}\n\n${__mod_info[$id/help]}"
+        local help="${__mod_desc[$id]}\n\n${__mod_help[$id]}"
         if [[ -n "$help" ]]; then
             options+=(H "Package Help")
         fi
@@ -279,7 +274,7 @@ function package_setup() {
                 ;;
             X)
                 local text="Are you sure you want to remove $id?"
-                case "${__mod_info[$id/section]}" in
+                case "${__mod_section[$id]}" in
                     core)
                         text+="\n\nWARNING - core packages are needed for RetroPie to function!"
                         ;;
@@ -324,20 +319,15 @@ function section_gui_setup() {
         local id
         local pkg_origin
         local num_pkgs=0
-        local info
         for id in $(rp_getSectionIds $section); do
-            if ! rp_isEnabled "$id"; then
-                info="\Zb*$id - Not available for your system\Zn"
+            if rp_isInstalled "$id"; then
+                eval $(rp_getPackageInfo "$id")
+                installed="\Zb(Installed - via $pkg_origin)\Zn"
+                ((num_pkgs++))
             else
-                if rp_isInstalled "$id"; then
-                    eval $(rp_getPackageInfo "$id")
-                    info="\Zb\Z7$id\Zn \Zb(Installed - via $pkg_origin)"
-                    ((num_pkgs++))
-                else
-                    info="$id"
-                fi
+                installed=""
             fi
-            pkgs+=("${__mod_idx[$id]}" "$info" "$id - ${__mod_info[$id/desc]}"$'\n\n'"${__mod_info[$id/help]}")
+            pkgs+=("${__mod_idx[$id]}" "$id $installed" "$id - ${__mod_desc[$id]}"$'\n\n'"${__mod_help[$id]}")
         done
 
         if [[ "$num_pkgs" -gt 0 ]]; then
@@ -383,7 +373,6 @@ function section_gui_setup() {
                 {
                     rps_logStart
                     for id in $(rp_getSectionIds $section); do
-                        ! rp_isEnabled "$id" && continue
                         # if we are updating, skip packages that are not installed
                         if [[ "$mode" == "update" ]]; then
                             if rp_isInstalled "$id"; then
@@ -426,8 +415,8 @@ function config_gui_setup() {
         local id
         for id in "${__mod_id[@]}"; do
             # show all configuration modules and any installed packages with a gui function
-            if [[ "${__mod_info[$id/section]}" == "config" ]] || rp_isInstalled "$id" && fnExists "gui_$id"; then
-                options+=("${__mod_idx[$id]}" "$id  - ${__mod_info[$id/desc]}" "${__mod_idx[$id]} ${__mod_info[$id/desc]}")
+            if [[ "${__mod_section[$id]}" == "config" ]] || rp_isInstalled "$id" && fnExists "gui_$id"; then
+                options+=("${__mod_idx[$id]}" "$id  - ${__mod_desc[$id]}" "${__mod_idx[$id]} ${__mod_desc[$id]}")
             fi
         done
 
@@ -468,7 +457,7 @@ function update_packages_setup() {
     clear
     local id
     for id in ${__mod_id[@]}; do
-        if rp_isInstalled "$id" && [[ "${__mod_info[$id/section]}" != "depends" ]]; then
+        if rp_isInstalled "$id" && [[ "${__mod_section[$id]}" != "depends" ]]; then
             rp_installModule "$id" "_update_"
         fi
     done
